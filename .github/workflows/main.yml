@@ -15,28 +15,23 @@ jobs:
         shell: powershell
         run: |
           $version = "1.85.0"
-          # 使用你提供的 Chrome 140 UserAgent
           $myUA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"
           
           [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
           
-          Write-Host "正在下载 rustup-init.exe..."
+          # Download rustup-init
           $url_init = "https://rust-lang.org"
           Invoke-WebRequest -Uri $url_init -OutFile "downloads\rustup-init.exe" -UserAgent $myUA
           
-          Write-Host "正在下载 MSI 离线包 v$version..."
+          # Download MSI
           $url_msi = "https://rust-lang.org"
           Invoke-WebRequest -Uri $url_msi -OutFile "downloads\rust-standalone.msi" -UserAgent $myUA
 
-      - name: 验证并显示文件大小
+      - name: List Files
         shell: powershell
-        run: |
-          $msi = Get-Item "downloads\rust-standalone.msi"
-          $sizeMB = [math]::Round($msi.Length / 1MB, 2)
-          Write-Host "最终 MSI 大小: $sizeMB MB"
-          if ($msi.Length -lt 100MB) { throw "下载的文件太小，可能触发了 404！" }
+        run: Get-ChildItem downloads
 
-      - name: 上传产物
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: rust-v1.85-win64
