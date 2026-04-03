@@ -1,4 +1,4 @@
-name: Download Rust Installers
+name: Download Best Rust Version
 
 on:
   workflow_dispatch:
@@ -11,47 +11,49 @@ jobs:
       - name: Create Download Folder
         run: mkdir downloads
 
-      - name: Download via Global CDN
+      - name: Priority Download (Latest to Stable)
         shell: powershell
         run: |
-          # Define the version
-          $version = "1.85.0" # Note: 1.94.1 is very new, let's use 1.85.0 if 1.94.1 fails
+          # 定义优先级版本列表（从高到低）
+          $versions = @("1.94.1", "1.94.0", "1.93.0", "1.85.0")
+          $success = $false
           
-          # Direct Global CDN Links (Backbone for static.rust-lang.org)
-          $url_init = "https://rust-lang.org"
-          $url_msi = "https://rust-lang.org"
-          
-          # Set TLS 1.2
+          # 设置 TLS 协议
           [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-          Function Download-WithRetry {
-              param ($url, $path)
-              $retryCount = 0
-              $maxRetries = 3
-              while ($retryCount -lt $maxRetries) {
-                  try {
-                      Write-Host "Attempting download: $url"
-                      Invoke-WebRequest -Uri $url -OutFile $path -TimeoutSec 300 -UserAgent "Mozilla/5.0"
-                      return
-                  } catch {
-                      $retryCount++
-                      Write-Host "Download failed. Retrying ($retryCount/$maxRetries)..."
-                      Start-Sleep -Seconds 5
+          # 首先下载基础工具 rustup-init (这个地址通常是固定的)
+          Write-Host "正在下载 rustup-init.exe..."
+          Invoke-WebRequest -Uri "https://rust-lang.org" -OutFile "downloads\rustup-init.exe" -UserAgent "Mozilla/5.0"
+
+          # 循环尝试版本列表
+          foreach ($v in $versions) {
+              $url = "https://rust-lang.org"
+              Write-Host "正在尝试下载版本 v$v : $url"
+              try {
+                  Invoke-WebRequest -Uri $url -OutFile "downloads\rust-standalone.msi" -ErrorAction Stop -UserAgent "Mozilla/5.0"
+                  
+                  # 检查下载的文件是否有效（大于 100MB）
+                  if ((Get-Item "downloads\rust-standalone.msi").Length -gt 100MB) {
+                      Write-Host "成功拿到版本 v$v ！文件大小: $("{0:N2}" -f ((Get-Item "downloads\rust-standalone.msi").Length / 1MB)) MB"
+                      $success = $true
+                      break # 找到最高优先级的可用版本，退出循环
                   }
+              } catch {
+                  Write-Host "版本 v$v 不可用 (404 或网络错误)，尝试下一个..."
               }
-              throw "Failed to download $url after $maxRetries attempts."
           }
 
-          Download-WithRetry -url $url_init -path "downloads\rustup-init.exe"
-          Download-WithRetry -url $url_msi -path "downloads\rust-standalone.msi"
+          if (-not $success) {
+              Write-Error "列表中的所有版本都无法下载！"
+              exit 1
+          }
 
-      - name: Check File Sizes
+      - name: Check Final Files
         shell: powershell
-        run: |
-          Get-ChildItem downloads | Select-Object Name, @{Name="Size(MB)";Expression={"{0:N2}" -f ($_.Length / 1MB)}}
+        run: Get-ChildItem downloads | Select-Object Name, @{Name="Size(MB)";Expression={"{0:N2}" -f ($_.Length / 1MB)}}
 
       - name: Upload to GitHub Actions
         uses: actions/upload-artifact@v4
         with:
-          name: rust-installers-win64
+          name: rust-best-available-win64
           path: downloads/
