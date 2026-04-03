@@ -11,39 +11,32 @@ jobs:
       - name: Create Download Folder
         run: mkdir downloads
 
-      - name: Download Confirmed Stable Version
+      - name: Download Rust Installers
         shell: powershell
         run: |
-          # 1.85.0 是当前（2025年初）最稳、最新的版本
-          # 1.94.x 目前在服务器上不存在，所以会报 404 (0.02MB)
           $version = "1.85.0"
+          # 使用你提供的 Chrome 140 UserAgent
+          $myUA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"
           
-          # 设置 TLS 1.2 协议保障
           [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
           
-          # 下载链接
-          $url_init = "https://rust-lang.org"
-          $url_msi = "https://rust-lang.org"
-
           Write-Host "正在下载 rustup-init.exe..."
-          Invoke-WebRequest -Uri $url_init -OutFile "downloads\rustup-init.exe" -UserAgent "Mozilla/5.0"
+          $url_init = "https://rust-lang.org"
+          Invoke-WebRequest -Uri $url_init -OutFile "downloads\rustup-init.exe" -UserAgent $myUA
           
-          Write-Host "正在下载真实存在的 MSI v$version..."
-          Invoke-WebRequest -Uri $url_msi -OutFile "downloads\rust-standalone.msi" -UserAgent "Mozilla/5.0"
+          Write-Host "正在下载 MSI 离线包 v$version..."
+          $url_msi = "https://rust-lang.org"
+          Invoke-WebRequest -Uri $url_msi -OutFile "downloads\rust-standalone.msi" -UserAgent $myUA
 
-      - name: 验证文件大小 (必须大于100MB)
+      - name: 验证并显示文件大小
         shell: powershell
         run: |
           $msi = Get-Item "downloads\rust-standalone.msi"
-          $sizeMB = $msi.Length / 1MB
-          Write-Host "最终文件大小: $("{0:N2}" -f $sizeMB) MB"
-          
-          if ($msi.Length -lt 100MB) {
-              Write-Error "下载失败！文件太小，这只是个错误页面。请检查版本号。"
-              exit 1
-          }
+          $sizeMB = [math]::Round($msi.Length / 1MB, 2)
+          Write-Host "最终 MSI 大小: $sizeMB MB"
+          if ($msi.Length -lt 100MB) { throw "下载的文件太小，可能触发了 404！" }
 
-      - name: Upload to GitHub Actions
+      - name: 上传产物
         uses: actions/upload-artifact@v4
         with:
           name: rust-v1.85-win64
