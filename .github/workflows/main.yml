@@ -11,22 +11,39 @@ jobs:
       - name: Create Download Folder
         run: mkdir downloads
 
-      - name: Download From Mirror
+      - name: Download via Global CDN
         shell: powershell
         run: |
-          # 明确指定最新版本 1.94.1
-          $version = "1.94.1"
+          # Define the version
+          $version = "1.85.0" # Note: 1.94.1 is very new, let's use 1.85.0 if 1.94.1 fails
           
-          # 使用清华镜像，由于是国内高校维护，同步官方最新版通常有几小时延迟，但极速且稳定
-          $url_init = "https://tsinghua.edu.cn"
-          $url_msi = "https://tsinghua.edu.cn"
+          # Direct Global CDN Links (Backbone for static.rust-lang.org)
+          $url_init = "https://rust-lang.org"
+          $url_msi = "https://rust-lang.org"
           
-          Write-Host "Downloading rustup-init..."
+          # Set TLS 1.2
           [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-          Invoke-WebRequest -Uri $url_init -OutFile "downloads\rustup-init.exe" -UserAgent "Mozilla/5.0"
-          
-          Write-Host "Downloading Standalone MSI v$version (Approx 200MB+)..."
-          Invoke-WebRequest -Uri $url_msi -OutFile "downloads\rust-standalone.msi" -UserAgent "Mozilla/5.0"
+
+          Function Download-WithRetry {
+              param ($url, $path)
+              $retryCount = 0
+              $maxRetries = 3
+              while ($retryCount -lt $maxRetries) {
+                  try {
+                      Write-Host "Attempting download: $url"
+                      Invoke-WebRequest -Uri $url -OutFile $path -TimeoutSec 300 -UserAgent "Mozilla/5.0"
+                      return
+                  } catch {
+                      $retryCount++
+                      Write-Host "Download failed. Retrying ($retryCount/$maxRetries)..."
+                      Start-Sleep -Seconds 5
+                  }
+              }
+              throw "Failed to download $url after $maxRetries attempts."
+          }
+
+          Download-WithRetry -url $url_init -path "downloads\rustup-init.exe"
+          Download-WithRetry -url $url_msi -path "downloads\rust-standalone.msi"
 
       - name: Check File Sizes
         shell: powershell
