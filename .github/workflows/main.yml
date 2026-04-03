@@ -1,0 +1,40 @@
+name: Download Rust Installers
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Create Download Folder
+        run: mkdir downloads
+
+      - name: Download From Mirror
+        shell: powershell
+        run: |
+          # 明确指定最新版本 1.94.1
+          $version = "1.94.1"
+          
+          # 使用清华镜像，由于是国内高校维护，同步官方最新版通常有几小时延迟，但极速且稳定
+          $url_init = "https://tsinghua.edu.cn"
+          $url_msi = "https://tsinghua.edu.cn"
+          
+          Write-Host "Downloading rustup-init..."
+          [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+          Invoke-WebRequest -Uri $url_init -OutFile "downloads\rustup-init.exe" -UserAgent "Mozilla/5.0"
+          
+          Write-Host "Downloading Standalone MSI v$version (Approx 200MB+)..."
+          Invoke-WebRequest -Uri $url_msi -OutFile "downloads\rust-standalone.msi" -UserAgent "Mozilla/5.0"
+
+      - name: Check File Sizes
+        shell: powershell
+        run: |
+          Get-ChildItem downloads | Select-Object Name, @{Name="Size(MB)";Expression={"{0:N2}" -f ($_.Length / 1MB)}}
+
+      - name: Upload to GitHub Actions
+        uses: actions/upload-artifact@v4
+        with:
+          name: rust-installers-win64
+          path: downloads/
