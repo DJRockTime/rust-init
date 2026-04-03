@@ -1,4 +1,4 @@
-name: Download Rust Installers
+name: Download Valid Rust Version
 
 on:
   workflow_dispatch:
@@ -11,38 +11,40 @@ jobs:
       - name: Create Download Folder
         run: mkdir downloads
 
-      - name: Download via Global CDN
+      - name: Download Confirmed Stable Version
         shell: powershell
         run: |
-          # 1.85.0 是目前最稳的稳定版链接
-          $version = "1.85.0" 
+          # 1.85.0 是当前（2025年初）最稳、最新的版本
+          # 1.94.x 目前在服务器上不存在，所以会报 404 (0.02MB)
+          $version = "1.85.0"
           
+          # 设置 TLS 1.2 协议保障
+          [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+          
+          # 下载链接
           $url_init = "https://rust-lang.org"
           $url_msi = "https://rust-lang.org"
-          
-          [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
           Write-Host "正在下载 rustup-init.exe..."
           Invoke-WebRequest -Uri $url_init -OutFile "downloads\rustup-init.exe" -UserAgent "Mozilla/5.0"
           
-          Write-Host "正在下载 MSI 离线包 v$version (大约 200MB+)..."
+          Write-Host "正在下载真实存在的 MSI v$version..."
           Invoke-WebRequest -Uri $url_msi -OutFile "downloads\rust-standalone.msi" -UserAgent "Mozilla/5.0"
 
-      - name: 验证文件大小
+      - name: 验证文件大小 (必须大于100MB)
         shell: powershell
         run: |
-          $files = Get-ChildItem downloads
-          foreach ($file in $files) {
-              $sizeMB = $file.Length / 1MB
-              Write-Host "$($file.Name) 大小: $("{0:N2}" -f $sizeMB) MB"
-              if ($file.Length -lt 1MB) { 
-                  Write-Error "文件 $($file.Name) 太小，下载可能失败了！"
-                  exit 1 
-              }
+          $msi = Get-Item "downloads\rust-standalone.msi"
+          $sizeMB = $msi.Length / 1MB
+          Write-Host "最终文件大小: $("{0:N2}" -f $sizeMB) MB"
+          
+          if ($msi.Length -lt 100MB) {
+              Write-Error "下载失败！文件太小，这只是个错误页面。请检查版本号。"
+              exit 1
           }
 
-      - name: 上传产物
+      - name: Upload to GitHub Actions
         uses: actions/upload-artifact@v4
         with:
-          name: rust-installers-win64
+          name: rust-v1.85-win64
           path: downloads/
