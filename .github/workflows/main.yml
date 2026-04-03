@@ -1,4 +1,4 @@
-name: Download Best Rust Version
+name: Download Rust Installers
 
 on:
   workflow_dispatch:
@@ -11,49 +11,38 @@ jobs:
       - name: Create Download Folder
         run: mkdir downloads
 
-      - name: Priority Download (Latest to Stable)
+      - name: Download via Global CDN
         shell: powershell
         run: |
-          # 定义优先级版本列表（从高到低）
-          $versions = @("1.94.1", "1.94.0", "1.93.0", "1.85.0")
-          $success = $false
+          # 1.85.0 是目前最稳的稳定版链接
+          $version = "1.85.0" 
           
-          # 设置 TLS 协议
+          $url_init = "https://rust-lang.org"
+          $url_msi = "https://rust-lang.org"
+          
           [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-          # 首先下载基础工具 rustup-init (这个地址通常是固定的)
           Write-Host "正在下载 rustup-init.exe..."
-          Invoke-WebRequest -Uri "https://rust-lang.org" -OutFile "downloads\rustup-init.exe" -UserAgent "Mozilla/5.0"
+          Invoke-WebRequest -Uri $url_init -OutFile "downloads\rustup-init.exe" -UserAgent "Mozilla/5.0"
+          
+          Write-Host "正在下载 MSI 离线包 v$version (大约 200MB+)..."
+          Invoke-WebRequest -Uri $url_msi -OutFile "downloads\rust-standalone.msi" -UserAgent "Mozilla/5.0"
 
-          # 循环尝试版本列表
-          foreach ($v in $versions) {
-              $url = "https://rust-lang.org"
-              Write-Host "正在尝试下载版本 v$v : $url"
-              try {
-                  Invoke-WebRequest -Uri $url -OutFile "downloads\rust-standalone.msi" -ErrorAction Stop -UserAgent "Mozilla/5.0"
-                  
-                  # 检查下载的文件是否有效（大于 100MB）
-                  if ((Get-Item "downloads\rust-standalone.msi").Length -gt 100MB) {
-                      Write-Host "成功拿到版本 v$v ！文件大小: $("{0:N2}" -f ((Get-Item "downloads\rust-standalone.msi").Length / 1MB)) MB"
-                      $success = $true
-                      break # 找到最高优先级的可用版本，退出循环
-                  }
-              } catch {
-                  Write-Host "版本 v$v 不可用 (404 或网络错误)，尝试下一个..."
+      - name: 验证文件大小
+        shell: powershell
+        run: |
+          $files = Get-ChildItem downloads
+          foreach ($file in $files) {
+              $sizeMB = $file.Length / 1MB
+              Write-Host "$($file.Name) 大小: $("{0:N2}" -f $sizeMB) MB"
+              if ($file.Length -lt 1MB) { 
+                  Write-Error "文件 $($file.Name) 太小，下载可能失败了！"
+                  exit 1 
               }
           }
 
-          if (-not $success) {
-              Write-Error "列表中的所有版本都无法下载！"
-              exit 1
-          }
-
-      - name: Check Final Files
-        shell: powershell
-        run: Get-ChildItem downloads | Select-Object Name, @{Name="Size(MB)";Expression={"{0:N2}" -f ($_.Length / 1MB)}}
-
-      - name: Upload to GitHub Actions
+      - name: 上传产物
         uses: actions/upload-artifact@v4
         with:
-          name: rust-best-available-win64
+          name: rust-installers-win64
           path: downloads/
